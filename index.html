@@ -109,6 +109,8 @@ html.dark #lock-msg{background:#000;border:1px solid var(--line)}
    - Never reuse or renumber a number once it has been used, or old messages will change meaning.
    - Keep the commas, quotes and brackets exactly as shown. Emoji work as the text too.
    ================================================================================= */
+
+/*current highest is 48*/
 const CHAT_PHRASES = [
   { category: "Greetings", phrases: [
     [1, "Hello!"], [2, "Good luck!"], [3, "Good game!"], [4, "Nice one!"], [5, "Ready when you are"],
@@ -120,7 +122,7 @@ const CHAT_PHRASES = [
     [20, "Heading north"], [21, "Heading south"], [22, "Heading east"], [23, "Heading west"], [24, "Meet at the jail"],
   ]},
   { category: "Tactics", phrases: [
-    [30, "Spotted someone"], [31, "Someone's nearby"], [32, "Spread out"], [33, "Stick together"], [34, "False alarm"],
+    [30, "Spotted someone"], [31, "Someone's nearby"], [48, "Hider close"], [32, "Spread out"], [33, "Stick together"], [34, "False alarm"],
   ]},
   { category: "Emoji", phrases: [
     [40, "👍"], [41, "👎"], [42, "👀"], [43, "😂"], [44, "🎉"], [45, "😱"], [46, "🏃"], [47, "🙈"],
