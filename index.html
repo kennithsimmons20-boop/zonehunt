@@ -140,6 +140,12 @@ html.dark .safety-btn svg{color:#f0e130}
 .collapsible .tog svg{transition:transform .2s}
 .collapsible.open .tog svg{transform:rotate(180deg)}
 .collapsible.open .chead{margin-bottom:.7rem}
+.me-icon{background:none;border:0}
+.me-dot{width:30px;height:30px;border-radius:50%;background:#1565c0;border:3px solid #fff;box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1px rgba(0,0,0,.3)}
+.me-arrow{display:block}
+.me-pip{width:8px;height:8px;border-radius:50%;background:#fff}
+.me-dot.has-heading .me-pip{display:none}
+.me-dot:not(.has-heading) .me-arrow{display:none}
 </style>
 </head>
 <body>
@@ -694,10 +700,13 @@ function startGeo() {
   }
   watchId = navigator.geolocation.watchPosition(p => {
     pos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() };
+    const gh = p.coords.heading; // while walking, the direction of travel is a good stand-in if there's no compass
+    if (typeof gh === "number" && !isNaN(gh) && (p.coords.speed || 0) > 1 && Date.now() - headingAt > 3000) setHeading(gh);
     if (!myMarker) {
-      myMarker = L.circleMarker([pos.lat, pos.lng], { radius: 8, color: "#fff", weight: 3, fillColor: "#1565c0", fillOpacity: 1 }).addTo(map);
+      myMarker = L.marker([pos.lat, pos.lng], { icon: meIcon(heading === null ? null : shownHeading), interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(map);
       if (!zones.play) map.setView([pos.lat, pos.lng], 16);
     } else myMarker.setLatLng([pos.lat, pos.lng]);
+    startCompass();
   }, err => say("room-err", "Location needed: " + err.message), { enableHighAccuracy: true, maximumAge: 2000 });
 }
 const isCircle = g => !!g && g.type === "Circle";
@@ -1363,7 +1372,7 @@ function updateEmMap(others) {
   });
   if (pos) {
     const ll = [pos.lat, pos.lng]; pts.push(ll);
-    L.circleMarker(ll, { radius: 8, color: "#fff", weight: 3, fillColor: "#1565c0", fillOpacity: 1 })
+    L.marker(ll, { icon: meIcon(heading === null ? null : shownHeading), interactive: false, keyboard: false })
       .bindTooltip("You", { permanent: true, direction: "top" }).addTo(emLayer);
   }
   const key = others.map(e => e.id).join(",");
@@ -1481,6 +1490,51 @@ $("btn-share").onclick = async () => {
   $("btn-share").textContent = ok ? "Message copied!" : "Couldn't share";
   setTimeout(() => { $("btn-share").textContent = "Share code"; }, 1600);
 };
+
+/* ---------- which way you're facing (the arrow inside your blue dot) ---------- */
+let heading = null, headingAt = 0, shownHeading = 0, headingRaf = 0, compassOn = false, compassTried = false;
+const ARROW = '<svg class="me-arrow" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 2.5 19 20 12 16 5 20z" fill="#fff"/></svg>';
+function meIcon(h) { // the blue "you" marker: a dot with an arrow, or just a dot until the direction is known
+  const has = h !== null && h !== undefined;
+  return L.divIcon({ className: "me-icon", iconSize: [30, 30], iconAnchor: [15, 15], tooltipAnchor: [0, -16],
+    html: '<div class="me-dot' + (has ? " has-heading" : "") + '">' +
+          ARROW.replace('class="me-arrow"', 'class="me-arrow" style="transform:rotate(' + (has ? h : 0) + 'deg)"') +
+          '<span class="me-pip"></span></div>' });
+}
+function setHeading(deg) { // deg = degrees clockwise from north
+  deg = ((deg % 360) + 360) % 360;
+  if (heading === null) shownHeading = deg;
+  else shownHeading += 0.35 * (((deg - shownHeading + 540) % 360) - 180); // smooth it, and never spin the long way round
+  heading = deg; headingAt = Date.now();
+  if (headingRaf) return;
+  headingRaf = requestAnimationFrame(() => {
+    headingRaf = 0;
+    const el = myMarker && myMarker.getElement && myMarker.getElement(); if (!el) return;
+    const dot = el.querySelector(".me-dot"), arrow = el.querySelector(".me-arrow"); if (!dot || !arrow) return;
+    dot.classList.add("has-heading"); arrow.style.transform = "rotate(" + shownHeading + "deg)";
+  });
+}
+function onOrient(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === "number") h = e.webkitCompassHeading;       // iPhone: already clockwise from north
+  else if (e.absolute && typeof e.alpha === "number") h = 360 - e.alpha;             // Android: alpha runs counter-clockwise
+  if (h === null || isNaN(h)) return;
+  h += (screen.orientation && screen.orientation.angle) || 0;
+  setHeading(h);
+}
+async function startCompass() {
+  if (compassOn || compassTried || typeof DeviceOrientationEvent === "undefined") return;
+  if (typeof DeviceOrientationEvent.requestPermission === "function") return; // iPhone: has to wait for a tap (below)
+  compassTried = compassOn = true;
+  addEventListener("ondeviceorientationabsolute" in window ? "deviceorientationabsolute" : "deviceorientation", onOrient);
+}
+document.addEventListener("click", async () => { // iPhones only share the compass after you allow it, and that needs a tap
+  if (compassOn || compassTried || !lobby || typeof DeviceOrientationEvent === "undefined" || typeof DeviceOrientationEvent.requestPermission !== "function") return;
+  compassTried = true;
+  try {
+    if (await DeviceOrientationEvent.requestPermission() === "granted") { compassOn = true; addEventListener("deviceorientation", onOrient); }
+  } catch (e) {}
+});
 
 /* ---------- dark mode ---------- */
 const TI = 'viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
