@@ -522,12 +522,14 @@ function nameOrErr() {
 }
 $("btn-create").onclick = async () => {
   const n = nameOrErr(); if (!n) return;
+  askPermissionsNow(); // must happen right inside the tap, before anything is awaited
   const { data, error } = await sb.rpc("create_lobby", { p_name: n, p_play_zone: null, p_jail_zone: null, p_hide: 120, p_game: 900 });
   if (error) return say("menu-err", error.message);
   await load(data); zones = { play: null, jail: null }; enter(data);
 };
 $("btn-join").onclick = async () => {
   const n = nameOrErr(); if (!n) return;
+  askPermissionsNow();
   const { data, error } = await sb.rpc("join_lobby", { p_code: $("code").value, p_name: n });
   if (error) return say("menu-err", error.message);
   await load(data); enter(data);
@@ -1528,13 +1530,18 @@ async function startCompass() {
   compassTried = compassOn = true;
   addEventListener("ondeviceorientationabsolute" in window ? "deviceorientationabsolute" : "deviceorientation", onOrient);
 }
-document.addEventListener("click", async () => { // iPhones only share the compass after you allow it, and that needs a tap
-  if (compassOn || compassTried || !lobby || typeof DeviceOrientationEvent === "undefined" || typeof DeviceOrientationEvent.requestPermission !== "function") return;
+function askOrientation() { // iPhones only share the compass after you allow it, and that request has to come straight from a tap
+  if (compassOn || compassTried || typeof DeviceOrientationEvent === "undefined" || typeof DeviceOrientationEvent.requestPermission !== "function") return;
   compassTried = true;
-  try {
-    if (await DeviceOrientationEvent.requestPermission() === "granted") { compassOn = true; addEventListener("deviceorientation", onOrient); }
-  } catch (e) {}
-});
+  DeviceOrientationEvent.requestPermission()
+    .then(r => { if (r === "granted") { compassOn = true; addEventListener("deviceorientation", onOrient); } })
+    .catch(() => { compassTried = false; }); // no tap behind it this time, so try again on the next tap
+}
+function askPermissionsNow() { // location first, then the compass, both inside the same tap so they appear back to back
+  if (navigator.geolocation) navigator.geolocation.getCurrentPosition(() => {}, () => {}, { enableHighAccuracy: true, timeout: 20000 });
+  askOrientation();
+}
+document.addEventListener("click", () => { if (lobby) askOrientation(); }); // backup, e.g. after reloading straight into a game
 
 /* ---------- dark mode ---------- */
 const TI = 'viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
